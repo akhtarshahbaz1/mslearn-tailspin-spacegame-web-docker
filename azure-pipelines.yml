@@ -5,6 +5,8 @@ variables:
   buildConfiguration: 'Release'
   webRepository: 'web'
   tag: '$(Build.BuildId)'
+  acrName: 'tailspinspacegame7904'         # ACR name only (not full login server)
+  acrLoginServer: 'tailspinspacegame7904.azurecr.io'  # Full login server name
 
 stages:
 - stage: 'Build'
@@ -15,16 +17,20 @@ stages:
     pool:
       name: 'CICDPool'
     steps:
-    - task: Docker@2
-      displayName: 'Build and push the image to container registry'
+    - checkout: self
+
+    - task: AzureCLI@2
+      displayName: 'Build and Push Image using ACR'
       inputs:
-        command: buildAndPush
-        buildContext: $(Build.Repository.LocalPath)
-        repository: $(webRepository)
-        dockerfile: '$(Build.SourcesDirectory)/Tailspin.SpaceGame.Web/Dockerfile'
-        containerRegistry: 'Container Registry Connection'
-        tags: |
-          $(tag)
+        azureSubscription: 'Resource Manager - Tailspin - Space Game'
+        scriptType: 'bash'
+        scriptLocation: 'inlineScript'
+        inlineScript: |
+          az acr build \
+            --registry $(acrName) \
+            --image $(webRepository):$(tag) \
+            --file Tailspin.SpaceGame.Web/Dockerfile \
+            .
 
 - stage: 'Deploy'
   displayName: 'Deploy the container'
@@ -38,7 +44,8 @@ stages:
     - group: Release
     steps:
     - task: AzureWebAppContainer@1
+      displayName: 'Deploy from ACR'
       inputs:
-       appName: $(WebAppName)
-       azureSubscription: 'Resource Manager - Tailspin - Space Game'
-       imageName: $(RegistryName)/$(webRepository):$(build.buildId)
+        azureSubscription: 'Resource Manager - Tailspin - Space Game'
+        appName: $(WebAppName)
+        containers: $(acrLoginServer)/$(webRepository):$(tag)
